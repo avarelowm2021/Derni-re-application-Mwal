@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MWAL – Registre de transactions</title>
+  <style>
+    :root{
+      --bg:#0b1020; --card:#121a33; --muted:#9fb0ff; --text:#e9eeff;
+      --accent:#6ee7ff; --danger:#ff6b6b; --ok:#62f6b5;
+      --border: rgba(255,255,255,.12);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      background: radial-gradient(1000px 700px at 15% 0%, rgba(110,231,255,.18), transparent 55%),
+                  radial-gradient(900px 650px at 85% 15%, rgba(98,246,181,.14), transparent 55%),
+                  var(--bg);
+      color: var(--text);
+    }
+    header{
+      padding: 28px 18px 14px;
+      max-width: 1100px; margin: 0 auto;
+    }
+    h1{margin:0 0 6px; font-size: 22px; letter-spacing:.2px}
+    .sub{margin:0; color: rgba(233,238,255,.75); font-size: 14px}
+    main{max-width:1100px; margin:0 auto; padding: 14px 18px 44px}
+    .grid{display:grid; grid-template-columns: 1.1fr .9fr; gap: 16px}
+    @media (max-width: 940px){ .grid{grid-template-columns: 1fr} }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .card h2{margin:0 0 10px; font-size: 16px}
+    .row{display:flex; gap: 10px; flex-wrap: wrap}
+    label{display:block; font-size: 12px; color: rgba(233,238,255,.75); margin: 0 0 6px}
+    input, select, textarea{
+      width:100%; padding: 10px 12px; border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.25);
+      color: var(--text);
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus{border-color: rgba(110,231,255,.65); box-shadow: 0 0 0 3px rgba(110,231,255,.12)}
+
+    .col{flex:1; min-width: 220px}
+    .btnbar{display:flex; gap:10px; flex-wrap: wrap; margin-top: 12px}
+    button{
+      padding: 10px 12px; border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(110,231,255,.10);
+      color: var(--text);
+      cursor:pointer;
+    }
+    button:hover{background: rgba(110,231,255,.16)}
+    .primary{background: rgba(98,246,181,.14)}
+    .primary:hover{background: rgba(98,246,181,.20)}
+    .danger{background: rgba(255,107,107,.16)}
+    .danger:hover{background: rgba(255,107,107,.22)}
+    .small{font-size: 12px; padding: 8px 10px}
+
+    .note{margin-top:10px; font-size: 12px; color: rgba(233,238,255,.72)}
+    .pill{display:inline-flex; align-items:center; gap:6px; padding: 6px 10px; border-radius:999px; border:1px solid var(--border); background: rgba(0,0,0,.18); color: rgba(233,238,255,.9); font-size: 12px}
+
+    table{width:100%; border-collapse: collapse; font-size: 13px}
+    th, td{padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top}
+    th{text-align:left; color: rgba(233,238,255,.78); font-weight: 600}
+    td{color: rgba(233,238,255,.90)}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px}
+    .muted{color: rgba(233,238,255,.62)}
+    .hash{max-width: 380px; overflow:hidden; text-overflow: ellipsis; white-space: nowrap}
+
+    .status{display:flex; gap:10px; flex-wrap: wrap; margin-top: 10px}
+    .ok{border-color: rgba(98,246,181,.45)}
+    .warn{border-color: rgba(255,107,107,.45)}
+
+    details{border:1px solid var(--border); border-radius: 14px; padding: 10px 12px; background: rgba(0,0,0,.18)}
+    summary{cursor:pointer; color: rgba(233,238,255,.88); font-weight: 600}
+    pre{white-space: pre-wrap; word-break: break-word; margin: 10px 0 0; color: rgba(233,238,255,.85)}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MWAL – Registre de transactions (mini‑blockchain)</h1>
+    <p class="sub">Saisissez un bien/service, un montant en <b>MWOLLOWM/MWAL</b> et l’équivalent en <b>€</b>. Chaque validation crée un « bloc » horodaté et chaîné par hash (stocké en <span class="mono">localStorage</span>).</p>
+  </header>
+
+  <main>
+    <div class="grid">
+      <section class="card">
+        <h2>Nouvelle transaction</h2>
+        <form id="txForm">
+          <div class="row">
+            <div class="col">
+              <label for="item">Bien et service</label>
+              <input id="item" name="item" placeholder="Ex: Réparation téléphone" required maxlength="120" />
+            </div>
+            <div class="col">
+              <label for="mwalType">Devise</label>
+              <select id="mwalType" name="mwalType" required>
+                <option value="MWOLLOWM">MWOLLOWM</option>
+                <option value="MWAL">MWAL</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div class="col">
+              <label for="mwalAmount">Montant (MWOLLOWM/MWAL)</label>
+              <input id="mwalAmount" name="mwalAmount" type="number" inputmode="decimal" step="0.00000000000000000001" min="0" required placeholder="0.00" />
+            </div>
+            <div class="col">
+              <label for="eurAmount">Équivalent (€)</label>
+              <input id="eurAmount" name="eurAmount" type="number" inputmode="decimal" step="0.00000000000000000001" min="0" required placeholder="0.00" />
+            </div>
+          </div>
+
+          <div style="margin-top:10px">
+            <label for="note">Note (optionnel)</label>
+            <textarea id="note" name="note" rows="2" maxlength="280" placeholder="Ex: facture #123, paiement partiel…"></textarea>
+          </div>
+
+          <div class="btnbar">
+            <button class="primary" type="submit">Créer le bloc</button>
+            <button type="button" id="exportBtn">Exporter JSON</button>
+            <button type="button" id="importBtn">Importer JSON</button>
+            <button class="danger" type="button" id="resetBtn">Réinitialiser</button>
+          </div>
+
+          <div class="note">
+            <span class="pill">⚠️ Version démo : les données sont sur <b>cet appareil</b> (navigateur). Pour 24/24 public : serveur + base de données + API.</span>
+          </div>
+
+          <input type="file" id="importFile" accept="application/json" hidden />
+        </form>
+
+        <div class="status" id="status"></div>
+      </section>
+
+      <section class="card">
+        <h2>État de la chaîne</h2>
+        <div class="row">
+          <div class="pill">Blocs : <b id="blockCount">0</b></div>
+          <div class="pill">Dernier hash : <span class="mono hash" id="lastHash">—</span></div>
+          <div class="pill" id="validPill">Validation : <b id="validState">—</b></div>
+        </div>
+        <div style="margin-top:12px">
+          <details>
+            <summary>Voir la règle de hash</summary>
+            <pre class="mono">hash = SHA-256(JSON({index, timestamp, tx, prevHash}))
+
+— Pas de "minage" ni de preuve de travail : c’est un registre chaîné simple.
+— La validation recalcule tous les hashes et vérifie les liens prevHash.</pre>
+          </details>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+      <h2>Cours public MWOLLOWM / MWAL (en €) <span id="currentPrice" class="pill" style="margin-left:8px">—</span></h2>
+      <canvas id="priceChart" height="160"></canvas>
+      <p class="note">Graphique indicatif basé sur les transactions enregistrées (€/MWAL et €/MWOLLOWM).</p>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h2>Livres / blocs de transactions</h2>
+      <div style="overflow:auto">
+        <table id="chainTable" aria-label="Table des blocs">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Date &amp; heure</th>
+              <th>Bien / service</th>
+              <th>MWOLLOWM/MWAL</th>
+              <th>€</th>
+              <th>prevHash</th>
+              <th>hash</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="note">Astuce : faites un clic droit &gt; Inspecter pour voir la structure des objets et l’API WebCrypto utilisée.</p>
+    </section>
+  </main>
+
+  <script>
+    // ======== Mini-chain storage ========
+    const STORAGE_KEY = "mwal_chain_v1";
+
+    /** @typedef {{ item:string, mwalType:"MWOLLOWM"|"MWAL", mwalAmount:number, eurAmount:number, note?:string }} Transaction */
+    /** @typedef {{ index:number, timestamp:string, tx:Transaction, prevHash:string, hash:string }} Block */
+
+    const el = (id) => document.getElementById(id);
+    const statusEl = el("status");
+
+    function nowISO(){
+      // ISO with timezone offset-ish readable. Using local time as string.
+      return new Date().toISOString();
+    }
+
+    function toMoney(n){
+      // Affichage jusqu'à 20 décimales sans perte côté saisie
+      const x = String(n);
+      if (!x) return "0";
+      if (!x.includes(".")) return x;
+      const [i,d] = x.split(".");
+      return i + "." + d.slice(0,20);
+    }
+
+    async function sha256(text){
+      const enc = new TextEncoder();
+      const buf = await crypto.subtle.digest("SHA-256", enc.encode(text));
+      return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,"0")).join("");
+    }
+
+    function loadChain(){
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      try {
+        const chain = JSON.parse(raw);
+        if (!Array.isArray(chain)) return [];
+        return chain;
+      } catch { return []; }
+    }
+
+    function saveChain(chain){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(chain));
+    }
+
+    async function computeBlockHash(blockLike){
+      const payload = {
+        index: blockLike.index,
+        timestamp: blockLike.timestamp,
+        tx: blockLike.tx,
+        prevHash: blockLike.prevHash,
+      };
+      return sha256(JSON.stringify(payload));
+    }
+
+    async function createGenesisIfEmpty(){
+      let chain = loadChain();
+      if (chain.length) return chain;
+
+      const genesis = {
+        index: 0,
+        timestamp: nowISO(),
+        tx: { item: "GENESIS", mwalType: "MWAL", mwalAmount: 0, eurAmount: 0, note: "Bloc initial" },
+        prevHash: "0".repeat(64),
+        hash: "",
+      };
+      genesis.hash = await computeBlockHash(genesis);
+      chain = [genesis];
+      saveChain(chain);
+      return chain;
+    }
+
+    async function addBlock(tx){
+      const chain = await createGenesisIfEmpty();
+      const prev = chain[chain.length - 1];
+      const block = {
+        index: prev.index + 1,
+        timestamp: nowISO(),
+        tx,
+        prevHash: prev.hash,
+        hash: "",
+      };
+      block.hash = await computeBlockHash(block);
+      chain.push(block);
+      saveChain(chain);
+      return chain;
+    }
+
+    async function validateChain(chain){
+      if (!Array.isArray(chain) || chain.length === 0) return { ok:false, reason:"Chaîne vide" };
+
+      for (let i = 0; i < chain.length; i++){
+        const b = chain[i];
+        const expectedHash = await computeBlockHash(b);
+        if (b.hash !== expectedHash){
+          return { ok:false, reason:`Hash invalide au bloc #${b.index}` };
+        }
+        if (i === 0){
+          if (b.prevHash !== "0".repeat(64)) return { ok:false, reason:"prevHash invalide au genesis" };
+        } else {
+          const prev = chain[i-1];
+          if (b.prevHash !== prev.hash){
+            return { ok:false, reason:`Lien cassé entre #${prev.index} et #${b.index}` };
+          }
+        }
+      }
+      return { ok:true, reason:"OK" };
+    }
+
+    function clearStatus(){ statusEl.innerHTML = ""; }
+    function pushStatus(msg, kind="ok"){
+      const div = document.createElement("div");
+      div.className = `pill ${kind === "ok" ? "ok" : "warn"}`;
+      div.textContent = msg;
+      statusEl.appendChild(div);
+    }
+
+    function renderChain(chain){
+      const tbody = el("chainTable").querySelector("tbody");
+      tbody.innerHTML = "";
+
+      for (const b of chain){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${b.index}</td>
+          <td class="mono">${b.timestamp}</td>
+          <td>${escapeHtml(b.tx.item)}${b.tx.note ? `<div class="muted">${escapeHtml(b.tx.note)}</div>` : ""}</td>
+          <td class="mono">${escapeHtml(b.tx.mwalType)} ${toMoney(b.tx.mwalAmount)}</td>
+          <td class="mono">€ ${toMoney(b.tx.eurAmount)}</td>
+          <td class="mono hash" title="${b.prevHash}">${b.prevHash}</td>
+          <td class="mono hash" title="${b.hash}">${b.hash}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      el("blockCount").textContent = String(chain.length);
+      el("lastHash").textContent = chain.length ? chain[chain.length - 1].hash : "—";
+    }
+
+    function escapeHtml(str){
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    async function refresh(){
+      const chain = await createGenesisIfEmpty();
+      renderChain(chain);
+      const res = await validateChain(chain);
+      el("validState").textContent = res.ok ? "Valide" : "Invalide";
+      el("validPill").classList.toggle("ok", res.ok);
+      el("validPill").classList.toggle("warn", !res.ok);
+      if (!res.ok) el("validPill").title = res.reason;
+    }
+
+    // ======== UI handlers ========
+    el("txForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearStatus();
+
+      const item = el("item").value.trim();
+      const mwalType = el("mwalType").value;
+      const mwalAmount = Number(el("mwalAmount").value);
+      const eurAmount = Number(el("eurAmount").value);
+      const note = el("note").value.trim();
+
+      if (!item) return pushStatus("Veuillez saisir un bien/service.", "warn");
+      if (!Number.isFinite(mwalAmount) || mwalAmount < 0) return pushStatus("Montant MWAL invalide.", "warn");
+      if (!Number.isFinite(eurAmount) || eurAmount < 0) return pushStatus("Montant € invalide.", "warn");
+
+      /** @type {Transaction} */
+      const tx = { item, mwalType, mwalAmount, eurAmount };
+      if (note) tx.note = note;
+
+      await addBlock(tx);
+      pushStatus("Bloc ajouté.", "ok");
+      e.target.reset();
+      el("mwalType").value = "MWOLLOWM";
+      await refresh();
+    });
+
+    el("resetBtn").addEventListener("click", async () => {
+      clearStatus();
+      if (!confirm("Réinitialiser la chaîne sur cet appareil ?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      pushStatus("Chaîne réinitialisée.", "ok");
+      await refresh();
+    });
+
+    el("exportBtn").addEventListener("click", async () => {
+      clearStatus();
+      const chain = loadChain();
+      const blob = new Blob([JSON.stringify(chain, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mwal_chain_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      pushStatus("Export JSON téléchargé.", "ok");
+    });
+
+    el("importBtn").addEventListener("click", () => {
+      clearStatus();
+      el("importFile").click();
+    });
+
+    el("importFile").addEventListener("change", async (e) => {
+      clearStatus();
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const chain = JSON.parse(text);
+        const res = await validateChain(chain);
+        if (!res.ok){
+          pushStatus("Import refusé : chaîne invalide (" + res.reason + ").", "warn");
+          return;
+        }
+        saveChain(chain);
+        pushStatus("Import OK.", "ok");
+        await refresh();
+      } catch {
+        pushStatus("Fichier JSON illisible.", "warn");
+      } finally {
+        e.target.value = "";
+      }
+    });
+
+    async function renderChart(chain){
+      // Affichage du cours actuel (dernier bloc)
+      const priceEl = document.getElementById('currentPrice');
+      const lastTx = [...chain].reverse().find(b => b.index !== 0);
+      if (lastTx){
+        const rate = lastTx.tx.eurAmount / (lastTx.tx.mwalAmount || 1);
+        priceEl.textContent = rate.toFixed(6) + " €";
+        priceEl.style.borderColor = 'rgba(98,246,181,.45)';
+      } else {
+        priceEl.textContent = '—';
+      }
+
+      const canvas = document.getElementById('priceChart');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      const points = [];
+
+      chain.forEach(b => {
+        if (b.index === 0) return;
+        const rate = b.tx.eurAmount / (b.tx.mwalAmount || 1);
+        points.push({
+          t: new Date(b.timestamp),
+          v: rate
+        });
+      });
+
+      if (points.length === 0) return;
+
+      const maxVal = Math.max(...points.map(p=>p.v));
+      const minVal = Math.min(...points.map(p=>p.v));
+      const pad = 10;
+      const w = canvas.width - pad*2;
+      const h = canvas.height - pad*2;
+
+      // Moyenne mobile simple (3 points)
+      const ma = points.map((p,i)=>{
+        const slice = points.slice(Math.max(0,i-2), i+1);
+        const avg = slice.reduce((s,x)=>s+x.v,0)/slice.length;
+        return { t:p.t, v:avg };
+      });
+
+      function xPos(i){ return pad + (i/(points.length-1||1))*w; }
+      function yPos(v){ return pad + h - ((v-minVal)/(maxVal-minVal||1))*h; }
+
+      // Courbe principale (hausse/baisse)
+      for (let i=1;i<points.length;i++){
+        const p0 = points[i-1];
+        const p1 = points[i];
+        ctx.beginPath();
+        ctx.moveTo(xPos(i-1), yPos(p0.v));
+        ctx.lineTo(xPos(i), yPos(p1.v));
+        ctx.strokeStyle = p1.v >= p0.v ? '#62f6b5' : '#ff6b6b';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(xPos(i), yPos(p1.v), 3, 0, Math.PI*2);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fill();
+      }
+
+      // Courbe moyenne mobile (blanc)
+      ctx.beginPath();
+      ma.forEach((p,i)=>{
+        i===0
+          ? ctx.moveTo(xPos(i), yPos(p.v))
+          : ctx.lineTo(xPos(i), yPos(p.v));
+      });
+      ctx.strokeStyle = '#e9eeff';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4,4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Axe temps (simplifié)
+      ctx.fillStyle = '#9fb0ff';
+      ctx.font = '10px system-ui';
+      points.forEach((p,i)=>{
+        if (i===0 || i===points.length-1){
+          ctx.fillText(p.t.toLocaleTimeString(), xPos(i)-12, canvas.height-2);
+        }
+      });
+
+      // Légende
+      ctx.fillStyle = '#62f6b5'; ctx.fillText('Hausse', 10, 12);
+      ctx.fillStyle = '#ff6b6b'; ctx.fillText('Baisse', 10, 26);
+      ctx.fillStyle = '#e9eeff'; ctx.fillText('Moyenne mobile', 10, 40);
+    }
+
+    async function refresh(){
+      const chain = await createGenesisIfEmpty();
+      renderChain(chain);
+      await renderChart(chain);
+      const res = await validateChain(chain);
+      el("validState").textContent = res.ok ? "Valide" : "Invalide";
+      el("validPill").classList.toggle("ok", res.ok);
+      el("validPill").classList.toggle("warn", !res.ok);
+      if (!res.ok) el("validPill").title = res.reason;
+    }
+
+    // Init
+    refresh();
+  </script>
+</body>
+</html>

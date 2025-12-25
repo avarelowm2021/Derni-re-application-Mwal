@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Indicateur public d’équivalence MWAL / MWOLLOWM (lecture informative)</title>
+<script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/axe.js"></script>
+<style>
+:root{
+  --bg:#070b16;--card:#0f1730;--text:#e9eeff;--muted:rgba(233,238,255,.72);
+  --border:rgba(255,255,255,.14);--r:20px
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+background:radial-gradient(1100px 900px at 10% -20%, rgba(110,231,255,.18), transparent 55%),
+radial-gradient(900px 800px at 90% 0%, rgba(98,246,181,.14), transparent 60%),var(--bg);color:var(--text)}
+header{max-width:1200px;margin:0 auto;padding:22px 18px 10px}
+h1{margin:0 0 10px;font-size:20px}
+.sub{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+main{max-width:1200px;margin:0 auto;padding:12px 18px 40px}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.03));
+border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.pill{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border-radius:999px;
+border:1px solid var(--border);background:rgba(0,0,0,.18);font-size:12px}
+select{padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(0,0,0,.25);color:var(--text)}
+canvas{width:100%;height:520px;display:block;border:1px solid var(--border);border-radius:14px;background:rgba(0,0,0,.14)}
+.mono{font-family:ui-monospace,monospace}
+.notice{
+  margin-top:10px;padding:12px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.18);
+  background:rgba(0,0,0,.22);color:rgba(233,238,255,.9);font-size:12px;line-height:1.5
+}
+.notice b{color:#fff}
+.small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Indicateur public d’équivalence MWAL / MWOLLOWM (lecture informative)</h1>
+  <p class="sub">
+    Cette page affiche un <b>historique d’équivalences constatées</b> à partir d’échanges de biens & services (blocs <span class="mono">EXCHANGE</span>).
+    <br/>Elle n’a pas pour objet de fournir un « prix » de marché ni un outil de spéculation.
+  </p>
+  <div class="notice" role="note" aria-label="Avertissement">
+    <b>AVERTISSEMENT — Lecture informative uniquement</b><br/>
+    Le MWAL / MWOLLOWM n’est pas vendu, acheté ou convertible en euros via ce site.
+    Les valeurs en € affichées sont des <b>équivalences indicatives</b> issues de libellés de biens/services,
+    et ne constituent ni une cotation de marché, ni une promesse, ni un conseil d’investissement.
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="row">
+      <span class="pill">Source: <span class="mono">gun-encaissement</span></span>
+      <span class="pill">Actif:
+        <select id="asset">
+          <option value="MWAL">MWAL</option>
+          <option value="MWOLLOWM">MWOLLOWM</option>
+        </select>
+      </span>
+      <span class="pill">Dernière équivalence (indicative): <b id="cur">—</b></span>
+      <span class="pill">Points: <b id="count">0</b></span>
+      <span class="pill">État: <b id="status">connexion…</b></span>
+    </div>
+
+    <canvas id="chart" width="1400" height="520"></canvas>
+    <div class="small" style="margin-top:10px">
+      L’échelle est exprimée en €/unité à titre informatif. Cette visualisation ne doit pas être interprétée comme une « courbe de prix ».
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const GUN_PEERS = ['https://gun-encaissement.onrender.com/gun'];
+  const PUBLIC_NODE = 'MWAL_PUBLIC_COURSE_V1';
+
+  const gun = Gun(GUN_PEERS);
+  const ptsByAsset = { MWAL: [], MWOLLOWM: [] };
+
+  const $ = (id)=>document.getElementById(id);
+  const canvas = $('chart');
+  const ctx = canvas.getContext('2d');
+
+  function setStatus(t){ $('status').textContent = t; }
+
+  function addPoint(pt){
+    const asset = (pt.asset||'').toUpperCase();
+    if(!ptsByAsset[asset]) return;
+    if(!pt.ts || !pt.rate) return;
+
+    if(pt.refBlock && ptsByAsset[asset].some(p => p.refBlock === pt.refBlock)) return;
+
+    ptsByAsset[asset].push({ ts:Number(pt.ts), v:Number(pt.rate), refBlock:pt.refBlock||'' });
+    ptsByAsset[asset].sort((a,b)=>a.ts-b.ts);
+    redraw();
+  }
+
+  function redraw(){
+    const asset = $('asset').value;
+    const pts = ptsByAsset[asset] || [];
+    $('count').textContent = String(pts.length);
+    $('cur').textContent = pts.length ? (pts[pts.length-1].v.toFixed(6)+' €') : '—';
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if(pts.length === 0){
+      ctx.fillStyle='rgba(233,238,255,.85)';
+      ctx.font='18px system-ui';
+      ctx.fillText('Aucune équivalence publiée pour le moment.', 18, 44);
+      ctx.font='12px system-ui';
+      ctx.fillText('Lorsqu’un bloc EXCHANGE est publié, un point apparaît ici.', 18, 68);
+      return;
+    }
+
+    const w=canvas.width,h=canvas.height;
+    const left=48,right=18,top=18,bottom=34;
+    const innerW=w-left-right, innerH=h-top-bottom;
+
+    // Grille neutre
+    ctx.save(); ctx.globalAlpha=0.25; ctx.lineWidth=1; ctx.strokeStyle='rgba(233,238,255,.35)';
+    for(let i=0;i<=6;i++){
+      const y = top + innerH*(i/6);
+      ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(w-right,y); ctx.stroke();
+    }
+    ctx.restore();
+
+    let minV=Infinity,maxV=-Infinity;
+    for(const p of pts){ minV=Math.min(minV,p.v); maxV=Math.max(maxV,p.v); }
+    if(minV===maxV){ minV*=0.99; maxV*=1.01; }
+
+    const t0=pts[0].ts, t1=pts[pts.length-1].ts, dt=Math.max(1,t1-t0);
+    const xOf=t=>left+((t-t0)/dt)*innerW;
+    const yOf=v=>top+(1-((v-minV)/(maxV-minV)))*innerH;
+
+    // Courbe neutre (une seule couleur)
+    ctx.strokeStyle='rgba(233,238,255,.85)';
+    ctx.lineWidth=2.5;
+    ctx.beginPath();
+    ctx.moveTo(xOf(pts[0].ts), yOf(pts[0].v));
+    for(let i=1;i<pts.length;i++){
+      ctx.lineTo(xOf(pts[i].ts), yOf(pts[i].v));
+    }
+    ctx.stroke();
+
+    const last=pts[pts.length-1];
+    ctx.fillStyle='rgba(233,238,255,.95)';
+    ctx.beginPath(); ctx.arc(xOf(last.ts),yOf(last.v),4,0,Math.PI*2); ctx.fill();
+
+    ctx.fillStyle='rgba(233,238,255,.75)';
+    ctx.font='12px ui-monospace, monospace';
+    ctx.fillText(minV.toFixed(6)+' €', left, h-10);
+    ctx.fillText(maxV.toFixed(6)+' €', left, 14);
+  }
+
+  $('asset').addEventListener('change', redraw);
+
+  setStatus('connexion…');
+  gun.get(PUBLIC_NODE).get('MWAL').map().on((data) => { if(!data) return; setStatus('connecté'); addPoint(data); });
+  gun.get(PUBLIC_NODE).get('MWOLLOWM').map().on((data) => { if(!data) return; setStatus('connecté'); addPoint(data); });
+
+  redraw();
+})();
+</script>
+</body>
+</html>
